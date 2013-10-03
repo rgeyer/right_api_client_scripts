@@ -1,0 +1,6 @@
+source 'https://rubygems.org'
+
+ruby '1.9.3'
+
+gem 'right_api_client', '= 1.5.12'
+gem 'rs_user_policy', '~> 0.1'
