@@ -25,7 +25,7 @@ clouds = client.clouds.index
 logger.info("Operating on #{clouds.size} Clouds")
 
 clouds.each do |cloud|
-  instances = cloud.instances.index(:filter => ['state<>inactive'], :view => 'extended')
+  instances = cloud.instances.index(:filter => ['state<>inactive','state<>terminated','state<>stopped'], :view => 'extended')
   logger.info("Found #{instances.count} that are either running or provisioned for cloud #{cloud.name}")
   instances.each do |instance|
     instance_type = instance.instance_type.show
