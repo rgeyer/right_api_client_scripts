@@ -30,6 +30,15 @@ logger.info("ServerTemplate href is #{st_href}")
 # Get the cloud
 logger.info("Searching for cloud with ID #{cloud_id}")
 cloud = client.clouds(:id => cloud_id).show()
+
+# Prep the server create params hash
+server_params_hash = {
+  :name => "LAMP All-in-One",
+  :instance => {
+    :cloud_href => cloud.href
+  }
+}
+
 begin
   # Create a deployment
   deployment_name = "AIO Trial CLI-#{timestamp}"
@@ -43,6 +52,7 @@ begin
     ssh_key = cloud.ssh_keys.create(:ssh_key => {:name => ssh_key_name})
     provisioned_hash["ssh_key"] = [ssh_key.href]
     logger.info("Created ssh_key named #{ssh_key_name} at #{ssh_key.href}")
+    server_params_hash[:instance][:ssh_key_href] = ssh_key.href
   else
     logger.info("The cloud #{cloud.name} does not support SSH keys, skipping creation")
   end
@@ -54,39 +64,45 @@ begin
     security_group.show()
     provisioned_hash["security_group"] = [security_group.href]
     logger.info("Created security_group named #{security_group_name} at #{security_group.href}")
+    server_params_hash[:instance][:security_group_hrefs] = [security_group.href]
 
-    # Allow ssh ingress
-    security_group.security_group_rules.create(
-        :security_group_rule => {
-            :cidr_ips => "0.0.0.0",
-            :direction => "ingress",
-            :protocol => "tcp",
-            :protocol_details => {
-                :start_port => "22",
-                :end_port => "22"
-            },
-            :source_type => "cidr"
-        }
-    )
-    logger.info("Added ssh security group rule")
-
-    # Allow http ingress
-    security_group.security_group_rules.create(
-        :security_group_rule => {
-            :cidr_ips => "0.0.0.0",
-            :direction => "ingress",
-            :protocol => "tcp",
-            :protocol_details => {
-                :start_port => "80",
-                :end_port => "80"
-            },
-            :source_type => "cidr"
-        }
-    )
-    logger.info("Added http security group rule")
+    ## Allow ssh ingress
+    #security_group.security_group_rules.create(
+    #    :security_group_rule => {
+    #        :cidr_ips => "0.0.0.0",
+    #        :direction => "ingress",
+    #        :protocol => "tcp",
+    #        :protocol_details => {
+    #            :start_port => "22",
+    #            :end_port => "22"
+    #        },
+    #        :source_type => "cidr"
+    #    }
+    #)
+    #logger.info("Added ssh security group rule")
+    #
+    ## Allow http ingress
+    #security_group.security_group_rules.create(
+    #    :security_group_rule => {
+    #        :cidr_ips => "0.0.0.0",
+    #        :direction => "ingress",
+    #        :protocol => "tcp",
+    #        :protocol_details => {
+    #            :start_port => "80",
+    #            :end_port => "80"
+    #        },
+    #        :source_type => "cidr"
+    #    }
+    #)
+    #logger.info("Added http security group rule")
   else
     logger.info("The cloud #{cloud.name} does not support security groups, skipping creation")
   end
+
+  # Add the server
+  server = deployment.servers.create('server' => server_params_hash)
+  provisioned_hash[:server] = [server.href]
+  logger.info("Created server named #{provisioned_hash[:name]} at #{server.href}")
 rescue Exception => e
   logger.error(e)
   logger.info(client.last_request[:request])
