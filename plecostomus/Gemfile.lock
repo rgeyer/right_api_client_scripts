@@ -1,0 +1,21 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+    json (1.8.0)
+    mime-types (1.25)
+    rest-client (1.6.7)
+      mime-types (>= 1.16)
+    right_api_client (1.5.12)
+      json
+      rest-client (~> 1.6)
+    rs_user_policy (0.1.8)
+      right_api_client (= 1.5.12)
+      trollop (>= 1.16, < 3.0)
+    trollop (2.0)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  right_api_client (= 1.5.12)
+  rs_user_policy (~> 0.1)
