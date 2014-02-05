@@ -3,10 +3,10 @@
 # Launches a single instance of a LAMP All-In-One Trial with MySQL 5.5 (v13.5.2-LTS)
 #
 
-
 require 'rubygems'
 require 'json'
 require 'logger'
+require 'timeout'
 require 'right_api_client'
 
 email     = ENV['RSEMAIL'] || 'your@email.com'
@@ -20,7 +20,8 @@ st_pub_id       = '183963'
 logger            = Logger.new(STDOUT)
 client            = RightApi::Client.new(:email => email, :password => pass, :account_id => acct_id)
 provisioned_hash  = {}
-timestamp         = Time.now.to_i
+time              = Time.now
+timestamp         = time.to_i
 
 # Import the publication and get the ServerTemplate href
 logger.info("Importing LAMP All-In-One Trial with MySQL 5.5 (v13.5.2-LTS) ServerTemplate")
@@ -35,7 +36,8 @@ cloud = client.clouds(:id => cloud_id).show()
 server_params_hash = {
   :name => "LAMP All-in-One",
   :instance => {
-    :cloud_href => cloud.href
+    :cloud_href => cloud.href,
+    :server_template_href => st_href
   }
 }
 
@@ -61,51 +63,71 @@ begin
   if cloud.links.select {|l| l["rel"] == "security_groups"}.size == 1
     security_group_name = "default-#{timestamp}"
     security_group = cloud.security_groups.create(:security_group => {:name => security_group_name})
-    security_group.show()
     provisioned_hash["security_group"] = [security_group.href]
     logger.info("Created security_group named #{security_group_name} at #{security_group.href}")
     server_params_hash[:instance][:security_group_hrefs] = [security_group.href]
 
-    ## Allow ssh ingress
-    #security_group.security_group_rules.create(
-    #    :security_group_rule => {
-    #        :cidr_ips => "0.0.0.0",
-    #        :direction => "ingress",
-    #        :protocol => "tcp",
-    #        :protocol_details => {
-    #            :start_port => "22",
-    #            :end_port => "22"
-    #        },
-    #        :source_type => "cidr"
-    #    }
-    #)
-    #logger.info("Added ssh security group rule")
-    #
-    ## Allow http ingress
-    #security_group.security_group_rules.create(
-    #    :security_group_rule => {
-    #        :cidr_ips => "0.0.0.0",
-    #        :direction => "ingress",
-    #        :protocol => "tcp",
-    #        :protocol_details => {
-    #            :start_port => "80",
-    #            :end_port => "80"
-    #        },
-    #        :source_type => "cidr"
-    #    }
-    #)
-    #logger.info("Added http security group rule")
+    # Allow ssh ingress
+    security_group.show.security_group_rules.create(
+        :security_group_rule => {
+            :cidr_ips => "0.0.0.0/0",
+            :direction => "ingress",
+            :protocol => "tcp",
+            :protocol_details => {
+                :start_port => "22",
+                :end_port => "22"
+            },
+            :source_type => "cidr_ips"
+        }
+    )
+    logger.info("Added ssh security group rule")
+
+    # Allow http ingress
+    security_group.show.security_group_rules.create(
+        :security_group_rule => {
+            :cidr_ips => "0.0.0.0/0",
+            :direction => "ingress",
+            :protocol => "tcp",
+            :protocol_details => {
+                :start_port => "80",
+                :end_port => "80"
+            },
+            :source_type => "cidr_ips"
+        }
+    )
+    logger.info("Added http security group rule")
   else
     logger.info("The cloud #{cloud.name} does not support security groups, skipping creation")
   end
 
   # Add the server
-  server = deployment.servers.create('server' => server_params_hash)
+  server = deployment.show.servers.create({:server => server_params_hash})
   provisioned_hash[:server] = [server.href]
   logger.info("Created server named #{provisioned_hash[:name]} at #{server.href}")
+
+  status = Timeout::timeout(1200) {
+    server.launch()
+    begin
+      state = server.show().state
+      logger.info("Server state is #{state}...  Waiting for 20 seconds")
+      Kernel.sleep(20)
+    end until ["stranded in booting","operational"].include?(state)
+  }
+
+  case server.show().state
+    when "operational"
+      logger.info("Successfully launched #{server.show().name}")
+    when "stranded in booting"
+      #audit_entry = client.audit_entries(
+      #  :filter => ["auditee_href==#{server.href}"],
+      #  :start_date => time.strftime("%Y/%m/%d %H:%M:%S"),
+      #  :end_date => Time.now.strftime("%Y/%m/%d %H:%M:%S")
+      #)
+      logger.error("Oops, there was a problem with getting #{server.show().name} operational, go check the audit entries in the dashboard please!.")
+  end
+
 rescue Exception => e
   logger.error(e)
-  logger.info(client.last_request[:request])
 ensure
   File.open("algae.js","w") do |file|
     file.write(JSON.generate(provisioned_hash))
