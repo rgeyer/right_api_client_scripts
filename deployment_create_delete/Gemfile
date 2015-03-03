@@ -1,0 +1,6 @@
+source 'https://rubygems.org'
+
+ruby '1.9.3'
+
+gem 'right_api_client', '= 1.5.26'
+gem 'trollop', '~> 2.1'
